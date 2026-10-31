@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  user
+  admin
+}
+
+enum StationStatus {
+  available
+  occupied
+  offline
+  unknown
+}
+
+model User {
+  id              String           @id @default(uuid()) @db.Uuid
+  email           String           @unique
+  passwordHash    String           @map("password_hash")
+  role            Role             @default(user)
+  createdAt       DateTime         @default(now()) @map("created_at")
+  vehicles        VehicleProfile[]
+  reports         StationReport[]
+  verifiedStations ChargingStation[] @relation("StationVerifier")
+
+  @@map("users")
+}
+
+model VehicleProfile {
+  id                         String   @id @default(uuid()) @db.Uuid
+  userId                     String   @map("user_id") @db.Uuid
+  make                       String
+  model                      String
+  usableBatteryCapacityKwh   Float    @map("usable_battery_capacity_kwh")
+  avgConsumptionKwhPerKm     Float    @map("avg_consumption_kwh_per_km")
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+  user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("vehicle_profiles")
+}
+
+model ChargingStation {
+  id                String        @id @default(uuid()) @db.Uuid
+  name              String
+  operator          String
+  latitude          Float
+  longitude         Float
+  location          Unsupported("geography(Point, 4326)")?
+  address           String
+  connectorTypes    String[]      @map("connector_types")
+  chargingSpeedKw   Float         @map("charging_speed_kw")
+  status            StationStatus @default(unknown)
+  lastVerifiedAt    DateTime?     @map("last_verified_at")
+  verifiedByAdminId String?       @map("verified_by_admin_id") @db.Uuid
+  verifiedByAdmin   User?         @relation("StationVerifier", fields: [verifiedByAdminId], references: [id], onDelete: SetNull)
+  reports           StationReport[]
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("charging_stations")
+}
+
+model StationReport {
+  id             String        @id @default(uuid()) @db.Uuid
+  stationId      String        @map("station_id") @db.Uuid
+  reportedStatus StationStatus @map("reported_status")
+  userId         String        @map("user_id") @db.Uuid
+  timestamp      DateTime      @default(now())
+  station        ChargingStation @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([stationId, timestamp])
+  @@map("station_reports")
+}
