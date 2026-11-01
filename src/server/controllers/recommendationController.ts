@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
-import { getTrafficAwareRoute } from "../services/routing";
+import { getRoute } from "../services/routing";
 
 const recommendationSchema = z.object({
   latitude: z.number().min(-90).max(90),
@@ -59,11 +59,11 @@ export async function getRecommendations(req: Request, res: Response) {
   `;
 
   const origin = { latitude: input.latitude, longitude: input.longitude };
-  const directRoute = await getTrafficAwareRoute(origin, input.destination);
+  const directRoute = await getRoute(origin, input.destination);
   const recommendations = await Promise.all(candidates.map(async (station) => {
     const [route, destinationLeg] = await Promise.all([
-      getTrafficAwareRoute(origin, { latitude: station.latitude, longitude: station.longitude }),
-      getTrafficAwareRoute(
+      getRoute(origin, { latitude: station.latitude, longitude: station.longitude }),
+      getRoute(
         { latitude: station.latitude, longitude: station.longitude },
         input.destination,
       ),
