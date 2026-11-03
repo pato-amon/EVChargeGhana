@@ -1,4 +1,5 @@
-import { Prisma, StationStatus } from "@prisma/client";
+import { Prisma, Role, StationStatus } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
@@ -14,6 +15,111 @@ const stationSchema = z.object({
   status: z.nativeEnum(StationStatus),
   verified: z.boolean().optional(),
 });
+
+const userCreateSchema = z.object({
+  email: z.string().email().max(254).transform((email) => email.toLowerCase()),
+  password: z.string().min(8).refine(
+    (password) => Buffer.byteLength(password, "utf8") <= 72,
+    "Password must be no more than 72 bytes",
+  ),
+  role: z.nativeEnum(Role).default(Role.user),
+});
+
+const userUpdateSchema = z.object({
+  email: z.string().email().max(254).transform((email) => email.toLowerCase()).optional(),
+  password: z.string().min(8).refine(
+    (password) => Buffer.byteLength(password, "utf8") <= 72,
+    "Password must be no more than 72 bytes",
+  ).optional(),
+  role: z.nativeEnum(Role).optional(),
+}).refine((input) => Object.values(input).some((value) => value !== undefined), {
+  message: "At least one field must be provided",
+});
+
+export async function listUsers(_req: Request, res: Response) {
+  const users = await prisma.user.findMany({
+    orderBy: [{ createdAt: "desc" }, { email: "asc" }],
+    select: { id: true, email: true, role: true, createdAt: true },
+  });
+  res.json(users);
+}
+
+export async function createUser(req: Request, res: Response) {
+  const input = userCreateSchema.parse(req.body);
+  const user = await prisma.user.create({
+    data: {
+      email: input.email,
+      passwordHash: await bcrypt.hash(input.password, 12),
+      role: input.role,
+    },
+    select: { id: true, email: true, role: true, createdAt: true },
+  });
+  res.status(201).json(user);
+}
+
+export async function updateUser(req: Request, res: Response) {
+  const id = z.string().uuid().parse(req.params.id);
+  const input = userUpdateSchema.parse(req.body);
+
+  if (req.user?.id === id && input.role === Role.user) {
+    res.status(409).json({ error: "You cannot remove your own administrator access." });
+    return;
+  }
+
+  const { password, ...userFields } = input;
+  const passwordHash = password ? await bcrypt.hash(password, 12) : undefined;
+  const result = await prisma.$transaction(async (transaction) => {
+    const existing = await transaction.user.findUnique({ where: { id }, select: { role: true } });
+    if (!existing) return { kind: "missing" as const };
+    if (existing.role === Role.admin && input.role === Role.user) {
+      const adminCount = await transaction.user.count({ where: { role: Role.admin } });
+      if (adminCount <= 1) return { kind: "last-admin" as const };
+    }
+    const user = await transaction.user.update({
+      where: { id },
+      data: { ...userFields, ...(passwordHash ? { passwordHash } : {}) },
+      select: { id: true, email: true, role: true, createdAt: true },
+    });
+    return { kind: "updated" as const, user };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  if (result.kind === "missing") {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (result.kind === "last-admin") {
+    res.status(409).json({ error: "The last administrator cannot be demoted." });
+    return;
+  }
+  res.json(result.user);
+}
+
+export async function deleteUser(req: Request, res: Response) {
+  const id = z.string().uuid().parse(req.params.id);
+  if (req.user?.id === id) {
+    res.status(409).json({ error: "You cannot delete your own account." });
+    return;
+  }
+
+  const result = await prisma.$transaction(async (transaction) => {
+    const existing = await transaction.user.findUnique({ where: { id }, select: { role: true } });
+    if (!existing) return "missing";
+    if (existing.role === Role.admin) {
+      const adminCount = await transaction.user.count({ where: { role: Role.admin } });
+      if (adminCount <= 1) return "last-admin";
+    }
+    await transaction.user.delete({ where: { id } });
+    return "deleted";
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  if (result === "missing") {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (result === "last-admin") {
+    res.status(409).json({ error: "The last administrator cannot be deleted." });
+    return;
+  }
+  res.status(204).end();
+}
 
 export async function listStations(_req: Request, res: Response) {
   const stations = await prisma.chargingStation.findMany({

@@ -30,7 +30,9 @@ New accounts receive the `user` role. To grant administrator access to an accoun
 UPDATE users SET role = 'admin' WHERE email = 'admin@example.com';
 ```
 
-The admin dashboard can then add stations, update their status, remove invalid records, and verify station details. Verification and station reports are timestamped in the database.
+The admin dashboard can then create, view, update, and delete stations and user accounts. User management includes role changes and password resets; deleting an account also deletes its vehicle profiles and station reports. The last administrator cannot be demoted or deleted. Station verification and user/station reports are timestamped in the database.
+
+To create the initial administrator, register the desired account through the app and promote it with the SQL above. Once signed in with an administrator account, use **Admin dashboard → Users** to create or update other accounts, including administrator roles. Passwords are hashed by the server and must be entered through the private form; do not put passwords in source code or commit them.
 
 ## Useful commands
 
@@ -48,8 +50,11 @@ The admin dashboard can then add stations, update their status, remove invalid r
 - `POST /api/stations/:id/reports` — authenticated station-status report; reports do not silently overwrite verified station status
 - `GET /api/vehicles`, `POST /api/vehicles`, `GET /api/vehicles/:id/battery?soc=78`
 - `POST /api/routes/recommendations` — authenticated; accepts current coordinates, destination coordinates, `vehicleId`, and `stateOfChargePercent`
-- `GET|POST|PUT|DELETE /api/admin/stations`, `POST /api/admin/stations/:id/verify`, `GET /api/admin/analytics` — administrator only
+- `POST /api/routes/navigation` — authenticated; accepts a station ID and current GPS coordinates, and returns road geometry and turn instructions for an available station
+- `GET|POST|PUT|DELETE /api/admin/stations`, `POST /api/admin/stations/:id/verify` — administrator only
+- `GET|POST|PUT|DELETE /api/admin/users` — administrator only; user create/update accepts password changes
+- `GET /api/admin/analytics` — administrator only
 
 Nearby searches use `ST_DWithin` against a PostGIS geography column with a GiST index. A migration trigger keeps that point synchronized with the station latitude/longitude.
 
-The trip planner calls Google Routes with `TRAFFIC_AWARE_OPTIMAL` for the direct trip, the route to each nearby charger, and the onward leg. It estimates energy use as route distance in km multiplied by vehicle consumption in kWh/km, then projects arrival SoC against usable battery capacity. Provider errors are returned to the caller rather than being replaced with non-traffic estimates.
+The trip planner uses the configured routing provider for the direct trip, route to each nearby charger, and onward leg. It estimates energy use as route distance in km multiplied by vehicle consumption in kWh/km, then projects arrival SoC against usable battery capacity. After accepting an available recommendation, the driver can start GPS navigation with a live map marker, road route, and turn instructions; the app requests location access only when navigation starts and recalculates if the driver leaves the route. Browser geolocation requires HTTPS or localhost. Provider errors are returned to the caller rather than being replaced with non-traffic estimates.

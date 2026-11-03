@@ -20,8 +20,13 @@ apiRouter.get("/vehicles", vehicles.listVehicles);
 apiRouter.post("/vehicles", vehicles.saveVehicle);
 apiRouter.get("/vehicles/:id/battery", vehicles.getBattery);
 apiRouter.post("/routes/recommendations", recommendations.getRecommendations);
+apiRouter.post("/routes/navigation", recommendations.getNavigation);
 
 apiRouter.use("/admin", requireAdmin);
+apiRouter.get("/admin/users", admin.listUsers);
+apiRouter.post("/admin/users", admin.createUser);
+apiRouter.put("/admin/users/:id", admin.updateUser);
+apiRouter.delete("/admin/users/:id", admin.deleteUser);
 apiRouter.get("/admin/stations", admin.listStations);
 apiRouter.post("/admin/stations", admin.createStation);
 apiRouter.put("/admin/stations/:id", admin.updateStation);

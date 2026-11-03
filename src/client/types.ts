@@ -1,5 +1,7 @@
 export type User = { id: string; email: string; role: "user" | "admin" };
 
+export type AdminUser = User & { createdAt: string };
+
 export type Vehicle = {
   id: string;
   make: string;
@@ -32,4 +34,15 @@ export type Recommendation = {
   tripEnergyKwh: number;
   arrivalSocPercent: number;
   recommendation: "Recommended" | "Use Caution" | "Not Recommended";
+};
+
+export type NavigationRoute = {
+  distanceKm: number;
+  durationMinutes: number;
+  geometry: Array<{ latitude: number; longitude: number }>;
+  steps: Array<{
+    instruction: string;
+    distanceMeters: number;
+    endLocation: { latitude: number; longitude: number };
+  }>;
 };

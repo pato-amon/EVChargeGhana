@@ -15,12 +15,12 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
   const token = getToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (token) headers.set("Authorization", "Bearer " + token);
 
-  const response = await fetch(`/api${path}`, { ...init, headers });
+  const response = await fetch("/api" + path, { ...init, headers });
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: string };
-    throw new ApiError(body.error ?? `Request failed (${response.status})`, response.status);
+    throw new ApiError(body.error ?? ("Request failed (" + response.status + ")"), response.status);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;

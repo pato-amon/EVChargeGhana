@@ -1,7 +1,8 @@
 import type { Request, Response } from "express";
+import { StationStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db";
-import { getRoute } from "../services/routing";
+import { getNavigationRoute, getRoute } from "../services/routing";
 
 const recommendationSchema = z.object({
   latitude: z.number().min(-90).max(90),
@@ -12,6 +13,12 @@ const recommendationSchema = z.object({
   }),
   vehicleId: z.string().uuid(),
   stateOfChargePercent: z.number().min(0).max(100),
+});
+
+const navigationSchema = z.object({
+  stationId: z.string().uuid(),
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
 });
 
 type Candidate = {
@@ -114,4 +121,38 @@ export async function getRecommendations(req: Request, res: Response) {
     a.trafficDurationMinutes - b.trafficDurationMinutes
   );
   res.json(recommendations);
+}
+
+export async function getNavigation(req: Request, res: Response) {
+  const input = navigationSchema.parse(req.body);
+  const station = await prisma.chargingStation.findUnique({
+    where: { id: input.stationId },
+    select: {
+      id: true,
+      name: true,
+      latitude: true,
+      longitude: true,
+      status: true,
+    },
+  });
+  if (!station) {
+    res.status(404).json({ error: "Charging station not found" });
+    return;
+  }
+  if (station.status !== StationStatus.available) {
+    res.status(409).json({ error: "This charging station is no longer available." });
+    return;
+  }
+
+  const route = await getNavigationRoute(
+    { latitude: input.latitude, longitude: input.longitude },
+    { latitude: station.latitude, longitude: station.longitude },
+  );
+  res.json({
+    station,
+    distanceKm: route.distanceKm,
+    durationMinutes: route.durationMinutes,
+    geometry: route.geometry,
+    steps: route.steps,
+  });
 }

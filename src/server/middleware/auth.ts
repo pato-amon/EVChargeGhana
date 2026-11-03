@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { Role } from "@prisma/client";
 import { config } from "../config";
+import { prisma } from "../db";
 
 type TokenPayload = { sub: string; role: Role };
 
@@ -25,8 +26,16 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (req.user?.role !== Role.admin) {
+export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || req.user.role !== Role.admin) {
+    res.status(403).json({ error: "Administrator access required" });
+    return;
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+    select: { role: true },
+  });
+  if (user?.role !== Role.admin) {
     res.status(403).json({ error: "Administrator access required" });
     return;
   }
